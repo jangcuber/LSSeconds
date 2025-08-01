@@ -53,53 +53,69 @@
 
 
 
-
-
 @interface _UIStatusBarStringView : UIView
--(void) setText:(NSString *)a1;
-@end 
+- (void)setText:(NSString *)a1;
+@end
 
-static NSTimer *globalTimer = nil;
-static _UIStatusBarStringView *timeView = nil;
+static const void *kViewTimerKey = &kViewTimerKey;
+
+static dispatch_source_t CreatePerViewTimer(_UIStatusBarStringView *view) {
+    dispatch_source_t timer = dispatch_source_create(
+        DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+        dispatch_get_main_queue()   
+    );
+    dispatch_source_set_timer(timer,
+                              DISPATCH_TIME_NOW,
+                              1ull * NSEC_PER_SEC,
+                              0);    
+    __weak typeof(view) weakView = view;
+    dispatch_source_set_event_handler(timer, ^{
+        __strong typeof(weakView) strongView = weakView;
+        if (!strongView) {
+            dispatch_source_cancel(timer);
+            return;
+        }
+
+        if (strongView.window) {
+            NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+            [fmt setDateFormat:@"hh:mm:ss"];
+            [strongView setText:[fmt stringFromDate:[NSDate date]]];
+        }
+    });
+    dispatch_resume(timer);
+    return timer;
+}
 
 %hook _UIStatusBarStringView
+
 - (void)setText:(NSString *)text {
     if ([text containsString:@":"]) {
 
-        timeView = self;
-        
-        if (!globalTimer) {
-            globalTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 
-                                                          repeats:YES 
-                                                            block:^(NSTimer *timer) {
-                if (timeView) {
-                    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-                    [formatter setDateFormat:@"hh:mm:ss"];
-                    NSString *timeWithSeconds = [formatter stringFromDate:[NSDate date]];
-                    
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [timeView setText:timeWithSeconds];
-                    });
-                }
-            }];
+        dispatch_source_t timer = objc_getAssociatedObject(self, kViewTimerKey);
+        if (!timer) {
+            timer = CreatePerViewTimer(self);
+            objc_setAssociatedObject(
+                self,
+                kViewTimerKey,
+                timer,
+                OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            );
         }
-        
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"h:mm:ss"];
-        NSString *timeWithSeconds = [formatter stringFromDate:[NSDate date]];
-        %orig(timeWithSeconds);
+
+        NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+        [fmt setDateFormat:@"h:mm:ss"];
+        %orig([fmt stringFromDate:[NSDate date]]);
     } else {
         %orig(text);
     }
 }
 
 - (void)dealloc {
-    if (timeView == self) {
-        timeView = nil;
-        if (globalTimer) {
-            [globalTimer invalidate];
-            globalTimer = nil;
-        }
+
+    dispatch_source_t timer = objc_getAssociatedObject(self, kViewTimerKey);
+    if (timer) {
+        dispatch_source_cancel(timer);
+        objc_setAssociatedObject(self, kViewTimerKey, nil, OBJC_ASSOCIATION_ASSIGN);
     }
     %orig;
 }
