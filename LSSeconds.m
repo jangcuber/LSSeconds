@@ -110,7 +110,7 @@
 
         [self.containerView.centerXAnchor constraintEqualToAnchor:self.baseController.view.centerXAnchor],
         [self.containerView.topAnchor constraintEqualToAnchor:self.baseController.view.topAnchor constant:60],
-        [self.containerView.widthAnchor constraintEqualToConstant:320],
+        [self.containerView.widthAnchor constraintEqualToAnchor:self.baseController.view.widthAnchor],
         [self.containerView.heightAnchor constraintEqualToConstant:240],
         
 
