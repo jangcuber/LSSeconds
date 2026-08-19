@@ -1,7 +1,7 @@
 Package: com.cm90.lsseconds
 Name: LSSeconds
 Depends: mobilesubstrate
-Version: 0.0.1
+Version: 0.0.4
 Architecture: iphoneos-arm
 Description: An awesome MobileSubstrate tweak!
 Maintainer: @CrazyMind90

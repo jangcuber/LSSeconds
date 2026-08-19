@@ -1,19 +1,2 @@
 #!/bin/sh
-
-
-cd /var/jb/Library/MobileSubstrate/DynamicLibraries/ && ldid -s LSSeconds.dylib LSSeconds.dylib
-echo "[+] done";
-exit
-
-
-
-
-
-
-
-
-
-
-
-
-
+exit 0

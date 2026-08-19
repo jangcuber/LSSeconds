@@ -1,21 +1,6 @@
-ARCHS = arm64e arm64
-
-export THEOS=/var/theos_RootHide
-export THEOS_PACKAGE_SCHEME = roothide
-
-# export THEOS_PACKAGE_SCHEME = rootless
-
-export TARGET = iphone:14.5
-export SDKVERSION = 14.5
-
-export THEOS_DEVICE_IP = 192.168.1.7
-export THEOS_DEVICE_PORT = 22
-export iP = $(THEOS_DEVICE_IP)
-export Port = $(THEOS_DEVICE_PORT)
-export Pass = alpine
-export Bundle = com.apple.springboard
-
-
+ARCHS ?= arm64 arm64e
+TARGET ?= iphone:clang:14.5:14.5
+export THEOS_PACKAGE_SCHEME ?= roothide
 
 INSTALL_TARGET_PROCESSES = SpringBoard
 
@@ -28,6 +13,5 @@ LSSeconds_CFLAGS = -fobjc-arc
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-
-install5::
-		install5.exec
+SUBPROJECTS += lssecondsprefs
+include $(THEOS_MAKE_PATH)/aggregate.mk
