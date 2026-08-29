@@ -25,6 +25,8 @@
 		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>When enabled, seconds and AM/PM stay above wallpaper depth effects.</string>
 			<key>label</key>
 			<string>Lock Screen</string>
 		</dict>
@@ -39,6 +41,18 @@
 			<string>lockscreenEnabled</string>
 			<key>label</key>
 			<string>Custom Lock Screen Clock</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.cm90.lsseconds</string>
+			<key>key</key>
+			<string>lockscreenAccessoriesAboveDepth</string>
+			<key>label</key>
+			<string>Keep Seconds &amp; AM/PM Visible</string>
 		</dict>
 		<dict>
 			<key>cell</key>

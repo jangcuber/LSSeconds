@@ -9,7 +9,12 @@
 
 @interface LSSeconds ()
 @property (nonatomic, weak) UIViewController *baseController;
+@property (nonatomic, weak) UIView *referenceTimeView;
+@property (nonatomic, weak) UIView *accessoryHostView;
 @property (nonatomic, strong) UIView *containerView;
+@property (nonatomic, strong) UIView *accessoryContainerView;
+@property (nonatomic, copy) NSArray<NSLayoutConstraint *> *positionConstraints;
+@property (nonatomic, copy) NSArray<NSLayoutConstraint *> *accessoryPositionConstraints;
 @property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) UILabel *secondsLabel;
 @property (nonatomic, strong) UILabel *ampmLabel;
@@ -18,14 +23,34 @@
 @property (nonatomic, strong) NSDateFormatter *secondsFormatter;
 @property (nonatomic, strong) NSDateFormatter *ampmFormatter;
 @property (nonatomic) BOOL aodActive;
+@property (nonatomic) BOOL accessoriesAboveDepth;
 @end
 
 @implementation LSSeconds
 
 - (instancetype)initWithBaseController:(UIViewController *)baseController {
+    return [self initWithBaseController:baseController
+                      referenceTimeView:nil
+                      accessoryHostView:nil];
+}
+
+- (instancetype)initWithBaseController:(UIViewController *)baseController
+                      referenceTimeView:(UIView *)referenceTimeView {
+    return [self initWithBaseController:baseController
+                      referenceTimeView:referenceTimeView
+                      accessoryHostView:nil];
+}
+
+- (instancetype)initWithBaseController:(UIViewController *)baseController
+                      referenceTimeView:(UIView *)referenceTimeView
+                      accessoryHostView:(UIView *)accessoryHostView {
     self = [super init];
     if (self) {
         _baseController = baseController;
+        _referenceTimeView = referenceTimeView;
+        _accessoryHostView = accessoryHostView;
+        _accessoriesAboveDepth =
+            LSSGetBoolPref(CFSTR("lockscreenAccessoriesAboveDepth"), NO);
         [self setupFormatters];
         [self setupViews];
         [self setupConstraints];
@@ -52,10 +77,12 @@
     self.containerView = [[UIView alloc] init];
     self.containerView.backgroundColor = UIColor.clearColor;
     self.containerView.userInteractionEnabled = NO;
-    self.containerView.layer.cornerRadius = 20;
-    self.containerView.layer.masksToBounds = YES;
     self.containerView.translatesAutoresizingMaskIntoConstraints = NO;
-    
+
+    self.accessoryContainerView = [[UIView alloc] init];
+    self.accessoryContainerView.backgroundColor = UIColor.clearColor;
+    self.accessoryContainerView.userInteractionEnabled = NO;
+    self.accessoryContainerView.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.timeLabel = [[UILabel alloc] init];
     self.timeLabel.font = [UIFont systemFontOfSize:108 weight:UIFontWeightThin];
@@ -75,31 +102,131 @@
     self.ampmLabel.textAlignment = NSTextAlignmentCenter;
     self.ampmLabel.translatesAutoresizingMaskIntoConstraints = NO;
     
-    [self.baseController.view addSubview:self.containerView];
+    UIView *hostView = self.referenceTimeView.superview ?: self.baseController.view;
+    [hostView addSubview:self.containerView];
     [self.containerView addSubview:self.timeLabel];
-    [self.containerView addSubview:self.secondsLabel];
-    [self.containerView addSubview:self.ampmLabel];
+    [self.containerView addSubview:self.accessoryContainerView];
+    [self.accessoryContainerView addSubview:self.secondsLabel];
+    [self.accessoryContainerView addSubview:self.ampmLabel];
     
 }
 
 - (void)setupConstraints {
     [NSLayoutConstraint activateConstraints:@[
-
-        [self.containerView.centerXAnchor constraintEqualToAnchor:self.baseController.view.centerXAnchor],
-        [self.containerView.topAnchor constraintEqualToAnchor:self.baseController.view.topAnchor constant:60],
-        [self.containerView.widthAnchor constraintEqualToAnchor:self.baseController.view.widthAnchor],
-        [self.containerView.heightAnchor constraintEqualToConstant:160],
-        
-
         [self.timeLabel.centerXAnchor constraintEqualToAnchor:self.containerView.centerXAnchor],
-        [self.timeLabel.topAnchor constraintEqualToAnchor:self.containerView.topAnchor constant:20],
-        
-        [self.secondsLabel.leadingAnchor constraintEqualToAnchor:self.timeLabel.trailingAnchor constant:8],
-        [self.secondsLabel.topAnchor constraintEqualToAnchor:self.timeLabel.topAnchor constant:35],
-        
+        [self.timeLabel.centerYAnchor constraintEqualToAnchor:self.containerView.centerYAnchor],
+
+        [self.secondsLabel.centerXAnchor constraintEqualToAnchor:self.accessoryContainerView.centerXAnchor],
+        [self.secondsLabel.centerYAnchor constraintEqualToAnchor:self.accessoryContainerView.centerYAnchor constant:-15],
+
         [self.ampmLabel.centerXAnchor constraintEqualToAnchor:self.secondsLabel.centerXAnchor],
         [self.ampmLabel.topAnchor constraintEqualToAnchor:self.secondsLabel.bottomAnchor constant:4]
     ]];
+
+    [self updatePositionConstraints];
+}
+
+- (void)updatePositionConstraints {
+    [NSLayoutConstraint deactivateConstraints:self.positionConstraints ?: @[]];
+
+    UIView *referenceView = self.referenceTimeView;
+    UIView *hostView = referenceView.superview ?: self.baseController.view;
+    if (!hostView) {
+        self.positionConstraints = @[];
+        return;
+    }
+
+    if (referenceView && referenceView.superview == hostView) {
+        // Replace the native clock at the same z-order instead of covering
+        // later siblings such as the charging indicator.
+        [hostView insertSubview:self.containerView aboveSubview:referenceView];
+    } else if (self.containerView.superview != hostView) {
+        [self.containerView removeFromSuperview];
+        [hostView addSubview:self.containerView];
+    }
+
+    if (referenceView && referenceView.superview == hostView) {
+        // Follow the system clock's live layout. iOS moves this view to make
+        // room for the date, charging indicator, notifications, and AOD.
+        self.positionConstraints = @[
+            [self.containerView.centerXAnchor constraintEqualToAnchor:referenceView.centerXAnchor],
+            [self.containerView.centerYAnchor constraintEqualToAnchor:referenceView.centerYAnchor],
+            [self.containerView.widthAnchor constraintEqualToAnchor:hostView.widthAnchor],
+            [self.containerView.heightAnchor constraintEqualToConstant:140]
+        ];
+    } else {
+        // Legacy fallback for systems where the native time view is not
+        // exposed. Keep this path until the reference view becomes available.
+        self.positionConstraints = @[
+            [self.containerView.centerXAnchor constraintEqualToAnchor:hostView.centerXAnchor],
+            [self.containerView.topAnchor constraintEqualToAnchor:hostView.topAnchor constant:70],
+            [self.containerView.widthAnchor constraintEqualToAnchor:hostView.widthAnchor],
+            [self.containerView.heightAnchor constraintEqualToConstant:140]
+        ];
+    }
+
+    [NSLayoutConstraint activateConstraints:self.positionConstraints];
+    [self updateAccessoryPositionConstraints];
+}
+
+- (void)updateAccessoryPositionConstraints {
+    [NSLayoutConstraint deactivateConstraints:self.accessoryPositionConstraints ?: @[]];
+
+    UIView *overlayHost = self.accessoryHostView;
+    BOOL canUseDepthOverlay =
+        self.accessoriesAboveDepth &&
+        overlayHost &&
+        self.referenceTimeView &&
+        [self.referenceTimeView isDescendantOfView:overlayHost];
+    UIView *hostView = canUseDepthOverlay ? overlayHost : self.containerView;
+
+    if (self.accessoryContainerView.superview != hostView) {
+        [self.accessoryContainerView removeFromSuperview];
+        [hostView addSubview:self.accessoryContainerView];
+    }
+
+    // These constraints intentionally bridge the native clock hierarchy when
+    // the accessory is in the overlay. Both views share accessoryHostView as
+    // a common ancestor, so seconds continue to follow the main clock.
+    self.accessoryPositionConstraints = @[
+        [self.accessoryContainerView.leadingAnchor
+            constraintEqualToAnchor:self.timeLabel.trailingAnchor
+                         constant:8],
+        [self.accessoryContainerView.centerYAnchor
+            constraintEqualToAnchor:self.timeLabel.centerYAnchor],
+        [self.accessoryContainerView.widthAnchor constraintEqualToConstant:64],
+        [self.accessoryContainerView.heightAnchor constraintEqualToConstant:80]
+    ];
+    [NSLayoutConstraint activateConstraints:self.accessoryPositionConstraints];
+}
+
+- (UIView *)desiredAccessoryHostView {
+    UIView *overlayHost = self.accessoryHostView;
+    if (self.accessoriesAboveDepth &&
+        overlayHost &&
+        self.referenceTimeView &&
+        [self.referenceTimeView isDescendantOfView:overlayHost]) {
+        return overlayHost;
+    }
+    return self.containerView;
+}
+
+- (void)updateReferenceTimeView:(UIView *)referenceTimeView {
+    if (!referenceTimeView) {
+        return;
+    }
+
+    if (self.referenceTimeView != referenceTimeView) {
+        self.referenceTimeView = referenceTimeView;
+        [self updatePositionConstraints];
+        return;
+    }
+
+    // On iOS 17/18 the prominent clock can enter its final hierarchy after
+    // viewWillAppear. Retry only when the desired host has actually changed.
+    if (self.accessoryContainerView.superview != [self desiredAccessoryHostView]) {
+        [self updateAccessoryPositionConstraints];
+    }
 }
 
 - (void)startUpdating {
@@ -172,6 +299,7 @@
 
 - (void)dealloc {
     [self stopUpdating];
+    [self.accessoryContainerView removeFromSuperview];
     [self.containerView removeFromSuperview];
 }
 

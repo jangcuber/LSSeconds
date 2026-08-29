@@ -54,6 +54,34 @@ static BOOL LSSLockScreenControllerIsScreenOff(
            [controller screenOff];
 }
 
+static UIView *LSSNativeLockScreenTimeView(
+    SBFLockScreenDateViewController *controller) {
+    SBFLockScreenDateView *dateView = [controller dateView];
+    CSProminentDisplayViewController *prominentController = nil;
+    if ([dateView respondsToSelector:@selector(prominentDisplayViewController)]) {
+        prominentController = dateView.prominentDisplayViewController;
+    }
+
+    CSProminentDisplayView *displayView = nil;
+    if ([prominentController respondsToSelector:@selector(_displayViewIfLoaded)]) {
+        displayView = [prominentController _displayViewIfLoaded];
+    }
+    if (!displayView && prominentController.isViewLoaded) {
+        displayView = (CSProminentDisplayView *)prominentController.view;
+    }
+    if ([displayView respondsToSelector:@selector(timeView)]) {
+        UIView *timeView = [displayView timeView];
+        if (timeView) {
+            return timeView;
+        }
+    }
+
+    if ([dateView respondsToSelector:@selector(_timeLabel)]) {
+        return [dateView _timeLabel];
+    }
+    return nil;
+}
+
 static void LSSHideNativeLockScreenClock(SBFLockScreenDateViewController *controller) {
     if (!LSSLockScreenClockEnabled()) {
         return;
@@ -76,22 +104,13 @@ static void LSSHideNativeLockScreenClock(SBFLockScreenDateViewController *contro
         prominentController.timeAlpha = 0.0;
     }
 
-    CSProminentDisplayView *displayView = nil;
-    if ([prominentController respondsToSelector:@selector(_displayViewIfLoaded)]) {
-        displayView = [prominentController _displayViewIfLoaded];
-    }
-    if (!displayView && prominentController) {
-        displayView = (CSProminentDisplayView *)prominentController.view;
-    }
-    if ([displayView respondsToSelector:@selector(timeView)]) {
-        UIView *timeView = [displayView timeView];
-        if (timeView) {
-            objc_setAssociatedObject(timeView,
-                                     kNativeLockScreenClockKey,
-                                     @YES,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            timeView.alpha = 0.0;
-        }
+    UIView *timeView = LSSNativeLockScreenTimeView(controller);
+    if (timeView) {
+        objc_setAssociatedObject(timeView,
+                                 kNativeLockScreenClockKey,
+                                 @YES,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        timeView.alpha = 0.0;
     }
 }
 
@@ -104,6 +123,7 @@ static void LSSConfigureLockScreenClock(SBFLockScreenDateViewController *control
 
     LSSeconds *clock = objc_getAssociatedObject(controller, kLockScreenClockKey);
     if (clock) {
+        [clock updateReferenceTimeView:LSSNativeLockScreenTimeView(controller)];
         if (LSSLockScreenControllerIsScreenOff(controller)) {
             [clock stopUpdating];
             [clock updateTimeForDate:NSDate.date
@@ -116,7 +136,10 @@ static void LSSConfigureLockScreenClock(SBFLockScreenDateViewController *control
     }
 
     UIViewController *baseController = controller.parentViewController ?: controller;
-    clock = [[LSSeconds alloc] initWithBaseController:baseController];
+    clock = [[LSSeconds alloc]
+        initWithBaseController:baseController
+            referenceTimeView:LSSNativeLockScreenTimeView(controller)
+            accessoryHostView:baseController.view];
     objc_setAssociatedObject(controller,
                              kLockScreenClockKey,
                              clock,
@@ -138,6 +161,19 @@ static void LSSConfigureLockScreenClock(SBFLockScreenDateViewController *control
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
     LSSConfigureLockScreenClock(self);
+}
+
+- (void)viewDidLayoutSubviews {
+    %orig;
+
+    LSSeconds *clock = objc_getAssociatedObject(self, kLockScreenClockKey);
+    if (!clock) {
+        LSSConfigureLockScreenClock(self);
+        return;
+    }
+
+    LSSHideNativeLockScreenClock(self);
+    [clock updateReferenceTimeView:LSSNativeLockScreenTimeView(self)];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {

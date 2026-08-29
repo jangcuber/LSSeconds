@@ -22,6 +22,12 @@ static inline BOOL LSSGetBoolPref(CFStringRef key, BOOL defaultValue) {
 @interface LSSeconds : NSObject
 
 - (instancetype)initWithBaseController:(UIViewController *)baseController;
+- (instancetype)initWithBaseController:(UIViewController *)baseController
+                      referenceTimeView:(nullable UIView *)referenceTimeView;
+- (instancetype)initWithBaseController:(UIViewController *)baseController
+                      referenceTimeView:(nullable UIView *)referenceTimeView
+                      accessoryHostView:(nullable UIView *)accessoryHostView;
+- (void)updateReferenceTimeView:(nullable UIView *)referenceTimeView;
 - (void)startUpdating;
 - (void)stopUpdating;
 - (void)updateTimeForDate:(NSDate *)date
